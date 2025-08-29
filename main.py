@@ -1,28 +1,42 @@
 import requests
+
 from dotenv import load_dotenv, dotenv_values
 from requests.exceptions import RequestException
+from functools import partial
 
+# OpenWeatherMap condition codes:
+# 2xx = Thunderstorm, 3xx = Drizzle, 5xx = Rain, 6xx = Snow
+# Codes < 700 indicate precipitation
+RAIN_THRESHOLD = 700
 
-def load_config(path=".env"):
-    load_dotenv()
-    return dotenv_values(path)
+# Pure function: loads config without side effects
+load_config = partial(dotenv_values, ".env")
 
-
+# Pure function: fetches forecast and returns result or error
 def fetch_forecast(url, params):
     try:
         response = requests.get(url, params, timeout=10)
         response.raise_for_status()
-        return response.json()
+        return response.json().get("list", [])
     except RequestException as e:
         return {"error": str(e)}
 
+def forecast_indicates_rain(forecast):
+    def extract_weather_id(item):
+        try:
+            return item["weather"][0]["id"]
+        except (KeyError, IndexError, TypeError):
+            return None
 
-def check_for_rain(forecast):
-    for item in forecast:
-        if item["weather"][0]["id"] < 700:
-            return True
-    return False
-
+    # Assign weather_id inline using the walrus operator (:=).
+    # This lets us check if it's valid and below the rain threshold in one expression.
+    # Equivalent to:
+    #   weather_id = extract_weather_id(item)
+    #   if weather_id is not None and weather_id < RAIN_THRESHOLD: ...
+    return any(
+        (weather_id := extract_weather_id(item)) is not None and weather_id < RAIN_THRESHOLD
+        for item in forecast
+    )
 
 def main():
     config = load_config()
@@ -37,10 +51,10 @@ def main():
         "cnt": 4
     }
 
-    forecast = fetch_forecast(url, weather_params)["list"]
-    will_rain_today = check_for_rain(forecast)
+    forecast = fetch_forecast(url, weather_params)
+    rain_today = forecast_indicates_rain(forecast)
 
-    if will_rain_today:
+    if rain_today:
         print("It will rain today!")
     else:
         print("It will not rain today.")
