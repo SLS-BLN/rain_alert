@@ -1,5 +1,7 @@
 import requests
+import os
 
+from twilio.rest import Client
 from dotenv import load_dotenv, dotenv_values
 from requests.exceptions import RequestException
 from functools import partial
@@ -38,6 +40,16 @@ def forecast_indicates_rain(forecast):
         for item in forecast
     )
 
+
+def send_sms(account_sid, auth_token, config):
+    client = Client(account_sid, auth_token)
+    message = client.messages.create(
+        body="It will rain today!",
+        from_=config["TWILIO_PHONE_NUMBER"],
+        to=config["MY_PHONE_NUMBER"]
+    )
+    return message
+
 def main():
     config = load_config()
 
@@ -51,11 +63,15 @@ def main():
         "cnt": 4
     }
 
+    account_sid = config["TWILIO_ACCOUNT_SID"]
+    auth_token = config["TWILIO_AUTH_TOKEN"]
+
     forecast = fetch_forecast(url, weather_params)
     rain_today = forecast_indicates_rain(forecast)
 
     if rain_today:
-        print("It will rain today!")
+        message = send_sms(account_sid, auth_token, config)
+        print(f"Message sent: {message.sid}")
     else:
         print("It will not rain today.")
 
